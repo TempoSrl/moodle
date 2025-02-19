@@ -31,12 +31,55 @@ require_once($CFG->dirroot . '/mod/quiz/locallib.php');
 $attemptid = required_param('attempt', PARAM_INT); // The attempt to summarise.
 $cmid = optional_param('cmid', null, PARAM_INT);
 
+
+/**
+ * Sends result to the external service
+ */
+function send_answers($attempt_id) {
+    global $CFG;
+    if (empty($CFG->BrainMasterService)){
+        return;
+    }            
+    $url = $CFG->BrainMasterService."moodle_get_answers"; // URL del web service.
+
+    $data = json_encode([
+        'id_attempt' => $attempt_id
+    ]);
+
+    // Usa cURL per inviare i dati al web service.
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $data);  // http_build_query($data)
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Content-Type: application/json',
+        'Content-Length: ' . strlen($data)
+    ]);
+    $response = curl_exec($ch);
+    $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($httpcode === 200) {
+        // Decodifica la risposta JSON
+        $decodedResponse = json_decode($response, true); // Usa true per un array associativo
+        # file_put_contents('C:\wamp64\www\moodle\allactivities_log.txt', "got response {$response}". PHP_EOL, FILE_APPEND);  
+      
+    } else {
+        debugging("Brainmaster: Failed to notify web service. Response: $response", DEBUG_DEVELOPER);
+        return  null;
+    }
+}
+
 $PAGE->set_url('/mod/quiz/summary.php', ['attempt' => $attemptid]);
 // During quiz attempts, the browser back/forwards buttons should force a reload.
 $PAGE->set_cacheable(false);
 $PAGE->set_secondary_active_tab("modulepage");
 
 $attemptobj = quiz_create_attempt_handling_errors($attemptid, $cmid);
+if ($attemptobj->get_attempt()->action !== null){
+    send_answers($attemptid);
+}
 
 // Check login.
 require_login($attemptobj->get_course(), false, $attemptobj->get_cm());

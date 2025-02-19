@@ -39,12 +39,19 @@ const TEMPLATES = {
 /**
  * Register events for attempt submit button.
  * @param {int} unAnsweredQuestions Total number of un-answered questions
+ * @param {boolean} isSequentialMode - Mode is sequential
  */
-const registerEventListeners = (unAnsweredQuestions) => {
+const registerEventListeners = (unAnsweredQuestions, isSequentialMode) => {
     const submitAction = document.querySelector(SELECTOR.attemptSubmitButton);
     if (submitAction) {
         submitAction.addEventListener('click', async(e) => {
             e.preventDefault();
+            // Checks  sequential mode
+            if (isSequentialMode) {
+                // Skips confirmation and send it directly
+                submitAction.closest(SELECTOR.attemptSubmitForm).submit();
+                return;
+            }
             try {
                 await saveCancelPromise(
                     getString('submission_confirmation', 'quiz'),
@@ -68,11 +75,12 @@ const registerEventListeners = (unAnsweredQuestions) => {
 /**
  * Initialises.
  * @param {int} unAnsweredQuestions Total number of unanswered questions
+ * @param {boolean} isSequentialMode - Sequential mode 
  */
-export const init = (unAnsweredQuestions) => {
+export const init = (unAnsweredQuestions,isSequentialMode ) => {
     Prefetch.prefetchStrings('core', ['submit']);
     Prefetch.prefetchStrings('core_admin', ['confirmation']);
     Prefetch.prefetchStrings('quiz', ['submitallandfinish', 'submission_confirmation']);
     Prefetch.prefetchTemplate(TEMPLATES.submissionConfirmation);
-    registerEventListeners(unAnsweredQuestions);
+    registerEventListeners(unAnsweredQuestions, isSequentialMode);
 };

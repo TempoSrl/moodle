@@ -543,6 +543,41 @@ class completion_info {
         return has_capability('moodle/course:overridecompletion', context_course::instance($this->course_id), $user);
     }
 
+    private static function notify_external_service($userid, $sectionid, $courseid) {
+        
+        global $CFG;
+
+        if (empty($CFG->BrainMasterService)){
+            return;
+        }            
+        $url = $CFG->BrainMasterService."moodle_unlock_lesson"; // URL del web service.
+
+
+        $data = json_encode([
+            'id_student' => $userid,
+            'id_lesson' => $sectionid,
+            'id_course' => $courseid
+        ]);
+
+        // Usa cURL per inviare i dati al web service.
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $data);  // http_build_query($data)
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Content-Type: application/json',
+            'Content-Length: ' . strlen($data)
+        ]);
+        $response = curl_exec($ch);
+        $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($httpcode !== 200) {
+            debugging("Brainmaster: Failed to notify web service. Response: $response", DEBUG_DEVELOPER);
+        }
+    }
+
     /**
      * Updates (if necessary) the completion state of activity $cm for the given
      * user.
@@ -623,6 +658,12 @@ class completion_info {
             return;
         }
 
+        // The activity completion alters the course state cache for this particular user.
+        $course = get_course($cm->course);
+        if ($course) {
+            course_format::session_cache_reset($course);
+        }
+
         // For auto tracking, if the status is overridden to 'COMPLETION_COMPLETE', then disallow further changes,
         // unless processing another override.
         // Basically, we want those activities which have been overridden to COMPLETE to hold state, and those which have been
@@ -667,6 +708,9 @@ class completion_info {
                 \core\di::get(\core\hook\manager::class)->dispatch($hook);
             }
         }
+        //Informs the external service that a lesson has been unlocked
+        self::notify_external_service($current->userid, $current->coursemoduleid, $this->course_id);
+
     }
 
     /**

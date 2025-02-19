@@ -206,6 +206,21 @@ class quiz_attempt {
         $this->sections = array_values($DB->get_records('quiz_sections',
                 ['quizid' => $this->get_quizid()], 'firstslot'));
 
+        // this should not interfere anyway with normal quizzes
+        if ($this->get_quiz_name()=="BrainMaster"){
+            // New slots are added if they are needed
+            while (count($this->slots) < $this->quba->question_count()) {   //that's count($this->quba->questionattempts)
+                $first = reset($this->slots);
+                if ($first && is_object($first)) {
+                    $new = clone $first;
+                    $last = end($this->slots);
+                    $new->slot = $last->slot + 1;
+                    $new->displaynumber = $last->displaynumber + 1;
+                    $this->slots[] = $new;
+                }      
+            }
+        }
+
         $this->link_sections_and_slots();
         $this->determine_layout();
         $this->number_questions();
@@ -2058,6 +2073,7 @@ class quiz_attempt {
      */
     public function process_attempt($timenow, $finishattempt, $timeup, $thispage) {
         global $DB;
+        global $CFG;
 
         $transaction = $DB->start_delegated_transaction();
 
@@ -2138,6 +2154,13 @@ class quiz_attempt {
             } else {
                 // The student is too late.
                 $this->process_going_overdue($timenow, true);
+            }
+
+            if ($CFG->repeat_errors>0){                
+                //Appends failed questions to the end of current attempt when necessary           
+                $uniqueid = $this->get_uniqueid();
+                $params = array('uniqueid' => $uniqueid, 'consecutive'=>$CFG->repeat_errors);
+                $DB->execute("CALL process_question(:uniqueid, :consecutive)", $params);    
             }
 
             $transaction->allow_commit();

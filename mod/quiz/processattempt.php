@@ -29,6 +29,7 @@
  */
 
 use mod_quiz\quiz_attempt;
+global $CFG;
 
 require_once(__DIR__ . '/../../config.php');
 require_once($CFG->dirroot . '/mod/quiz/locallib.php');
@@ -65,6 +66,14 @@ if ($page == -1) {
     if ($mdlscrollto !== '') {
         $nexturl->param('mdlscrollto', $mdlscrollto);
     }
+}
+
+// Quando l’utente clicca "Next Page", salva il timestamp in una variabile di sessione.
+if ($CFG->storetime && $next && !$finishattempt && !$timeup && isset($attemptid)) {
+    // store session timestamp for "Next Page".
+    if (!isset($_SESSION['last_nextpage_timestamp'])){
+        $_SESSION['last_nextpage_timestamp']= time();
+    }   
 }
 
 // Check login.

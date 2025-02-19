@@ -491,9 +491,13 @@ class renderer extends plugin_renderer_base {
      * @return string
      */
     public function start_attempt_page(quiz_settings $quizobj, preflight_check_form $mform) {
+        global $CFG;
         $output = '';
         $output .= $this->header();
-        $output .= $this->during_attempt_tertiary_nav($quizobj->view_url());
+        $isSequentialMode = ($quizobj->get_quiz()->navmethod === 'sequential')  && $CFG->storetime;;
+        if (!$isSequentialMode){
+            $output .= $this->during_attempt_tertiary_nav($quizobj->view_url());
+        }	
         $output .= $this->heading(format_string($quizobj->get_quiz_name(), true,
                 ["context" => $quizobj->get_context()]));
         $output .= $this->quiz_intro($quizobj->get_quiz(), $quizobj->get_cm());
@@ -516,9 +520,16 @@ class renderer extends plugin_renderer_base {
      */
     public function attempt_page($attemptobj, $page, $accessmanager, $messages, $slots, $id,
             $nextpage) {
+        global $CFG;
         $output = '';
         $output .= $this->header();
-        $output .= $this->during_attempt_tertiary_nav($attemptobj->view_url());
+        $quiz = $attemptobj->get_quiz();
+        
+        $isSequentialMode = ($quiz->navmethod === 'sequential') && $CFG->storetime;;
+        if (!$isSequentialMode){
+            $output .= $this->during_attempt_tertiary_nav($attemptobj->view_url());
+        }
+
         $output .= $this->quiz_notices($messages);
         $output .= $this->countdown_timer($attemptobj, time());
         $output .= $this->attempt_form($attemptobj, $page, $slots, $id, $nextpage);
@@ -588,7 +599,7 @@ class renderer extends plugin_renderer_base {
         }
 
         $navmethod = $attemptobj->get_quiz()->navmethod;
-        $output .= $this->attempt_navigation_buttons($page, $attemptobj->is_last_page($page), $navmethod);
+        $output .= $this->attempt_navigation_buttons($page, $attemptobj->is_last_page($page),  $attemptobj, $navmethod);
 
         // Some hidden fields to track what is going on.
         $output .= html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'attempt',
@@ -627,7 +638,7 @@ class renderer extends plugin_renderer_base {
      * @param string $navmethod Optional quiz attribute, 'free' (default) or 'sequential'
      * @return string HTML fragment.
      */
-    protected function attempt_navigation_buttons($page, $lastpage, $navmethod = 'free') {
+    protected function attempt_navigation_buttons($page, $lastpage, $attemptobj, $navmethod = 'free') {
         $output = '';
 
         $output .= html_writer::start_tag('div', ['class' => 'submitbtns']);
@@ -642,10 +653,23 @@ class renderer extends plugin_renderer_base {
         } else {
             $nextlabel = get_string('navigatenext', 'quiz');
         }
-        $output .= html_writer::empty_tag('input', ['type' => 'submit', 'name' => 'next',
-                'value' => $nextlabel, 'class' => 'mod_quiz-next-nav btn btn-primary', 'id' => 'mod_quiz-next-nav']);
+        $slot = $attemptobj->get_slots()[$page]; // Supponendo che $page corrisponda alla posizione della domanda
+        $question_attempt = $attemptobj->get_question_attempt($slot);
+
+        // Verifica se la domanda ha delle risposte.
+        $has_choices = !empty($question_attempt->get_question()->get_expected_data());
+
+        // Controlla se la domanda è stata completata o se è una "finta domanda". (HGL)
+        if ($question_attempt->get_state()->is_finished() || !$has_choices) {
+            // Mostra il pulsante "Next Page".
+            $output .= html_writer::empty_tag('input', ['type' => 'submit', 'name' => 'next',
+            'value' => $nextlabel, 'class' => 'mod_quiz-next-nav btn btn-primary', 'id' => 'mod_quiz-next-nav']);
+        } 
+
         $output .= html_writer::end_tag('div');
-        $this->page->requires->js_call_amd('core_form/submit', 'init', ['mod_quiz-next-nav']);
+        if ($question_attempt->get_state()->is_finished() || !$has_choices) {
+            $this->page->requires->js_call_amd('core_form/submit', 'init', ['mod_quiz-next-nav']);
+        }
 
         return $output;
     }
@@ -736,9 +760,14 @@ class renderer extends plugin_renderer_base {
      * @param display_options $displayoptions
      */
     public function summary_page($attemptobj, $displayoptions) {
+        global $CFG;
         $output = '';
         $output .= $this->header();
-        $output .= $this->during_attempt_tertiary_nav($attemptobj->view_url());
+        $quiz = $attemptobj->get_quiz();
+        $isSequentialMode = ($quiz->navmethod === 'sequential')  && $CFG->storetime;
+        if (!$isSequentialMode){
+            $output .= $this->during_attempt_tertiary_nav($attemptobj->view_url());
+        }
         $output .= $this->heading(format_string($attemptobj->get_quiz_name()));
         $output .= $this->heading(get_string('summaryofattempt', 'quiz'), 3);
         $output .= $this->summary_table($attemptobj, $displayoptions);
@@ -833,15 +862,19 @@ class renderer extends plugin_renderer_base {
      */
     public function summary_page_controls($attemptobj) {
         $output = '';
+        global $CFG;
 
         // Return to place button.
-        if ($attemptobj->get_state() == quiz_attempt::IN_PROGRESS) {
-            $button = new single_button(
-                    new moodle_url($attemptobj->attempt_url(null, $attemptobj->get_currentpage())),
-                    get_string('returnattempt', 'quiz'));
-            $output .= $this->container($this->container($this->render($button),
-                    'controls'), 'submitbtns mdl-align');
+        if (!$CFG->storetime){
+            if ($attemptobj->get_state() == quiz_attempt::IN_PROGRESS) {
+                $button = new single_button(
+                        new moodle_url($attemptobj->attempt_url(null, $attemptobj->get_currentpage())),
+                        get_string('returnattempt', 'quiz'));
+                $output .= $this->container($this->container($this->render($button),
+                        'controls'), 'submitbtns mdl-align');
+            }
         }
+         
 
         // Finish attempt button.
         $options = [
@@ -864,7 +897,9 @@ class renderer extends plugin_renderer_base {
                 // Only count the unanswered question if the navigation method is set to free.
                 $totalunanswered = $attemptobj->get_number_of_unanswered_questions();
             }
-            $this->page->requires->js_call_amd('mod_quiz/submission_confirmation', 'init', [$totalunanswered]);
+            $quiz = $attemptobj->get_quiz();
+            $isSequentialMode = ($quiz->navmethod === 'sequential') && $CFG->storetime;
+            $this->page->requires->js_call_amd('mod_quiz/submission_confirmation', 'init', [$totalunanswered,$isSequentialMode]);
         }
         $button->type = \single_button::BUTTON_PRIMARY;
 

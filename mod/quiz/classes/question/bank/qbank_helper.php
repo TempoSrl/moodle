@@ -57,6 +57,174 @@ class qbank_helper {
         return version_options::get_version_options($questionid);
     }
 
+      /**
+     * Complete the given slot with some data (questionid=s{slot.id}, filtercondition, category ,qtype, length )
+     */
+    public static function prepare_slot(stdClass  $slot){
+        // Ensure the right id is the id.
+        $slot->id = $slot->slotid;
+
+        if ($slot->filtercondition) {
+            //Unpack the information about a random question.
+            $slot->questionid = 's' . $slot->id; // Sometimes this is used as an array key, so needs to be unique.
+            $filter = json_decode($slot->filtercondition, true);
+            $slot->filtercondition = question_reference_manager::convert_legacy_set_reference_filter_condition($filter);
+
+            $slot->category = $slot->filtercondition['filter']['category']['values'][0] ?? 0;
+
+            $slot->qtype = 'random';
+            $slot->name = get_string('random', 'quiz');
+            $slot->length = 1;
+        } else if ($slot->qtype === null) {
+            // This question must have gone missing. Put in a placeholder.
+            $slot->questionid = 's' . $slot->id; // Sometimes this is used as an array key, so needs to be unique.
+            $slot->category = 0;
+            $slot->qtype = 'missingtype';
+            $slot->name = get_string('missingquestion', 'quiz');
+            $slot->questiontext = ' ';
+            $slot->questiontextformat = FORMAT_HTML;
+            $slot->length = 1;
+        } else if (!\question_bank::qtype_exists($slot->qtype)) {
+            // Question of unknown type found in the database. Set to placeholder question types instead.
+            $slot->qtype = 'missingtype';
+        } else {
+            $slot->_partiallyloaded = 1;
+        }
+    }
+    
+    /**
+     * Same as get_question_structure, but obtains questions from an external service
+     */
+    public static function get_brainmaster_structure(string $userid, int $idcourse, ?int $action ): array {
+        global $DB;
+        global $CFG;
+
+        if (empty($CFG->BrainMasterService)){
+            return [];
+        }            
+        $url = $CFG->BrainMasterService."moodle_get_test"; // web service url
+
+        $data = json_encode([
+            'id_student' => $userid,
+            'id_course' => $idcourse,
+            'action' => $action
+        ]);
+        
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $data);  
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Content-Type: application/json',
+            'Content-Length: ' . strlen($data)
+        ]);
+        $response = curl_exec($ch);
+        $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($httpcode !== 200) {
+            debugging("Brainmaster: Failed to notify web service. Response: $response", DEBUG_DEVELOPER);
+        }
+
+        $ids = [];
+        if ($httpcode === 200) {
+            // Decodifica la risposta JSON
+            $decodedResponse = json_decode($response, true); // Usa true per un array associativo
+            
+            if (isset($decodedResponse['error'])) {
+                echo "Errore: " . $decodedResponse['error'];
+                return null;
+            } elseif (isset($decodedResponse['questions_id'])) {
+                echo "Test suggerito: " . var_export($decodedResponse['questions_id'],true);
+                $ids =  $decodedResponse['questions_id'];               
+
+            } else {
+                echo "Risposta non prevista: " . $response;
+                return null;
+            }
+        } else {
+            debugging("Brainmaster: Failed to notify web service. Response: $response", DEBUG_DEVELOPER);
+            return  null;
+        }
+
+        if (empty($ids)) {
+            $slotdata = []; // Nessun ID, quindi nessun risultato
+        } else {
+            // Creiamo i placeholder dinamici
+            $placeholders = [];
+            $values = [];
+        
+            foreach ($ids as $index => $id) {
+                $placeholder = ':id' . $index;
+                $placeholders[] = $placeholder;
+                $values[$placeholder] = $id;
+            }
+            $ids = array_map('intval', $ids);
+            list($sql_in, $values) = $DB->get_in_or_equal($ids, SQL_PARAMS_NAMED, 'id');
+
+            $sql = "
+                SELECT 
+                    ROW_NUMBER() OVER (ORDER BY slot.id) AS slot,
+                    ROW_NUMBER() OVER (ORDER BY slot.id) AS slotid,
+                    ROW_NUMBER() OVER (ORDER BY slot.id) AS page,
+                    ROW_NUMBER() OVER (ORDER BY slot.id) AS displaynumber,
+                    1 AS requireprevious,
+                    slot.maxmark, slot.quizgradeitemid,
+                    NULL AS filtercondition, NULL AS usingcontextid,
+                    qv.status, qv.id AS versionid, qv.version,
+                    qr.version AS requestedversion, qv.questionbankentryid,
+                    q.id AS questionid, q.*,
+                    qc.id AS category, qc.contextid AS contextid
+                FROM {question} q
+                JOIN {question_versions} qv ON q.id = qv.questionid
+                JOIN {question_bank_entries} qbe ON qv.questionbankentryid = qbe.id
+                LEFT JOIN {question_categories} qc ON qc.id = qbe.questioncategoryid
+                LEFT JOIN {question_references} qr ON  
+                            qbe.id = qr.questionbankentryid 
+                            AND qr.component='mod_quiz' 
+                            AND qr.questionarea='slot'                                
+                JOIN {quiz_slots} slot ON slot.id = qr.itemid
+                JOIN {quiz} quiz ON slot.quizid = quiz.id
+                JOIN {context} c ON c.instanceid = quiz.id AND c.contextlevel=80
+                WHERE q.id $sql_in;
+            ";
+            
+            // Run the query
+            $slotdata = $DB->get_records_sql($sql, $values);
+
+            // Sort like $ids
+            usort($slotdata, function($a, $b) use ($ids) {
+                $pos_a = array_search($a->id, $ids);
+                $pos_b = array_search($b->id, $ids);
+                return $pos_a - $pos_b;
+            });
+
+            $counter = 1;
+            foreach ($slotdata as $slot) {
+                $slot->slot = $counter;
+                $slot->slotid = $counter; // slotid = slot
+                $slot->page = $counter;   // one page per question
+                $slot->displaynumber = $counter; 
+                $slot->requireprevious = 1;
+                $counter++;
+            }
+            
+
+        }
+
+        $uri = $_SERVER["REQUEST_URI"];
+        echo($uri);
+        
+        foreach ($slotdata as $slot) {
+            self::prepare_slot($slot);            
+        }
+        $to_shift = array_key_first($slotdata);
+        return $slotdata;
+    }
+
+
+
     /**
      * Get the information about which questions should be used to create a quiz attempt.
      *
@@ -164,35 +332,8 @@ class qbank_helper {
 
         // Unpack the random info from question_set_reference.
         foreach ($slotdata as $slot) {
-            // Ensure the right id is the id.
-            $slot->id = $slot->slotid;
-
-            if ($slot->filtercondition) {
-                // Unpack the information about a random question.
-                $slot->questionid = 's' . $slot->id; // Sometimes this is used as an array key, so needs to be unique.
-                $filter = json_decode($slot->filtercondition, true);
-                $slot->filtercondition = question_reference_manager::convert_legacy_set_reference_filter_condition($filter);
-
-                $slot->category = $slot->filtercondition['filter']['category']['values'][0] ?? 0;
-
-                $slot->qtype = 'random';
-                $slot->name = get_string('random', 'quiz');
-                $slot->length = 1;
-            } else if ($slot->qtype === null) {
-                // This question must have gone missing. Put in a placeholder.
-                $slot->questionid = 's' . $slot->id; // Sometimes this is used as an array key, so needs to be unique.
-                $slot->category = 0;
-                $slot->qtype = 'missingtype';
-                $slot->name = get_string('missingquestion', 'quiz');
-                $slot->questiontext = ' ';
-                $slot->questiontextformat = FORMAT_HTML;
-                $slot->length = 1;
-            } else if (!\question_bank::qtype_exists($slot->qtype)) {
-                // Question of unknown type found in the database. Set to placeholder question types instead.
-                $slot->qtype = 'missingtype';
-            } else {
-                $slot->_partiallyloaded = 1;
-            }
+            self::prepare_slot($slot);      
+            
         }
 
         return $slotdata;
