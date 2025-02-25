@@ -153,17 +153,20 @@ class quiz_settings {
         global $CFG;
 
         if ($this->quiz->name === "BrainMaster" && (!empty($CFG->BrainMasterService)) &&  $action !== null){
-            //Gets structure from external service
+            // If the quiz name is "BrainMaster", the answers are dynamically retrieved from an external service,
+            // specifically the Brain Master neural network.
             $slots = qbank_helper::get_brainmaster_structure($userid, $this->course->id, $action);
         }
-        else {
-            //A seguito della modifica $this->questions può contenere questionid duplicati, prima invece era un array associativo per questionid
+        else {            
+            // For other quizzes, the standard question structure is used.
             $slots = qbank_helper::get_question_structure($this->quiz->id, $this->context);
         }
 
         $this->questions = [];
         foreach ($slots as $slot) {
-             $this->questions[] = $slot; //Before, this was a dictionary. This is necessary to allow question repetitions.
+            // Previously, $this->questions was a dictionary. Now it's a list to allow repetitions
+            // of the same question in the quiz.
+             $this->questions[] = $slot; 
         }
     }
 
