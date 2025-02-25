@@ -68,7 +68,7 @@ if ($page == -1) {
     }
 }
 
-// Quando l’utente clicca "Next Page", salva il timestamp in una variabile di sessione.
+// When the user clicks "Next Page", save the timestamp in a session variable.
 if ($CFG->storetime && $next && !$finishattempt && !$timeup && isset($attemptid)) {
     // store session timestamp for "Next Page".
     if (!isset($_SESSION['last_nextpage_timestamp'])){

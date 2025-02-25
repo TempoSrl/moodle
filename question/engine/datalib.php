@@ -209,8 +209,11 @@ class question_engine_data_mapper {
             $rows[] = $data;        
     
             if ($CFG->storetime){
-                // Stores additional data in the log
+                // Stores additional data in the log, in order to measure the elapsed time
+                //  for each response, and also the time spento on viewing the feedback
                 if ($insert){
+                    //this is necessary because we don't want this value to be replaced in successive
+                    //  updates
                     $data = new stdClass();
                     $data->attemptstepid = $stepid;
                     $data->name =  $name . "_stamp";
@@ -311,6 +314,8 @@ class question_engine_data_mapper {
             $rows[] = $data;
 
             if ($CFG->storetime && $name == "-submit"){
+                // store the stamp in order to measure the time spent on viewing the
+                //  feedback on the single response
                 $data = new stdClass();
                 $data->attemptstepid = $firststep->get_id();
                 $data->name = ':_' . $name . "_stamp";
@@ -1636,19 +1641,19 @@ class question_engine_unit_of_work implements question_usage_observer {
                     $step, $questionattemptid, $seq, $this->quba->get_owning_context());
         }
 
-        // Supponendo che $this->attemptsmodified sia un array ordinato di oggetti con la proprietà timemodified.
-        $isValidOrder = true; // Flag per indicare se l'ordine è corretto.
+        // We assume $this->attemptsmodified is a sorted list of objects each with their timemodified field        
+        $isValidOrder = true; // is true if the list is sorted
 
         if ($CFG->storetime){
-            // Controlla che l'array contenga almeno 2 elementi prima di entrare nel ciclo
+            // checks there are at least two elements in the list
             if (count($this->attemptsmodified) > 1) {
                 for ($i = 0; $i < count($this->attemptsmodified) - 1; $i++) {
-                    // Verifica che ci siano almeno due elementi da confrontare
                     if (isset($this->attemptsmodified[$i]) && isset($this->attemptsmodified[$i + 1])) {
-                        // Confronta il timemodified dell'elemento corrente con quello successivo.
+                        // compare timemodified of the current element with the next element's
                         if ($this->attemptsmodified[$i]->timemodified > $this->attemptsmodified[$i + 1]->timemodified) {
                             $isValidOrder = false;
-                            break; // Esce dal ciclo se trova un errore di ordine.
+                            file_put_contents( 'C:\wamp64\www\allactivities_log.txt', 'elements out of order found '. PHP_EOL, FILE_APPEND);
+                            break; // elements are not sorted -> exit without updating
                         }
                     }
                 }
@@ -1658,10 +1663,11 @@ class question_engine_unit_of_work implements question_usage_observer {
         }
         
         if ($isValidOrder) {
+            // don't update if the updates are out of order
             foreach ($this->attemptsmodified as $qa) {
                 $dm->update_question_attempt($qa);
             }
-        }   
+        }    
 
         foreach ($this->attemptsadded as $qa) {
             $stepdata[] = $dm->insert_question_attempt(

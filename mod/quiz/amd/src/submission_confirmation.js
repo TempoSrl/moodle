@@ -39,7 +39,7 @@ const TEMPLATES = {
 /**
  * Register events for attempt submit button.
  * @param {int} unAnsweredQuestions Total number of un-answered questions
- * @param {boolean} isSequentialMode - Mode is sequential
+ * @param {boolean} isSequentialMode Mode is sequential. If true, no confirmation is asked.
  */
 const registerEventListeners = (unAnsweredQuestions, isSequentialMode) => {
     const submitAction = document.querySelector(SELECTOR.attemptSubmitButton);
@@ -75,7 +75,7 @@ const registerEventListeners = (unAnsweredQuestions, isSequentialMode) => {
 /**
  * Initialises.
  * @param {int} unAnsweredQuestions Total number of unanswered questions
- * @param {boolean} isSequentialMode - Sequential mode 
+ * @param {boolean} isSequentialMode Sequential mode. If true, no confirmation is asked.
  */
 export const init = (unAnsweredQuestions,isSequentialMode ) => {
     Prefetch.prefetchStrings('core', ['submit']);

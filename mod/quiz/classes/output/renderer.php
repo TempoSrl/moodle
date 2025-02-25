@@ -496,6 +496,7 @@ class renderer extends plugin_renderer_base {
         $output .= $this->header();
         $isSequentialMode = ($quizobj->get_quiz()->navmethod === 'sequential')  && $CFG->storetime;;
         if (!$isSequentialMode){
+            //Don't show back button if mode is sequential
             $output .= $this->during_attempt_tertiary_nav($quizobj->view_url());
         }	
         $output .= $this->heading(format_string($quizobj->get_quiz_name(), true,
@@ -527,6 +528,7 @@ class renderer extends plugin_renderer_base {
         
         $isSequentialMode = ($quiz->navmethod === 'sequential') && $CFG->storetime;;
         if (!$isSequentialMode){
+            //Don't show back button if mode is sequential
             $output .= $this->during_attempt_tertiary_nav($attemptobj->view_url());
         }
 
@@ -599,6 +601,7 @@ class renderer extends plugin_renderer_base {
         }
 
         $navmethod = $attemptobj->get_quiz()->navmethod;
+        //Brain Master: adding parameter $attemptobj
         $output .= $this->attempt_navigation_buttons($page, $attemptobj->is_last_page($page),  $attemptobj, $navmethod);
 
         // Some hidden fields to track what is going on.
@@ -635,6 +638,7 @@ class renderer extends plugin_renderer_base {
      *
      * @param int $page the page number. Starts at 0 for the first page.
      * @param bool $lastpage is this the last page in the quiz?
+     * @param quiz_attempt $attemptobj
      * @param string $navmethod Optional quiz attribute, 'free' (default) or 'sequential'
      * @return string HTML fragment.
      */
@@ -653,20 +657,24 @@ class renderer extends plugin_renderer_base {
         } else {
             $nextlabel = get_string('navigatenext', 'quiz');
         }
-        $slot = $attemptobj->get_slots()[$page]; // Supponendo che $page corrisponda alla posizione della domanda
+
+        // Assume that $page represents the question slot number, 
+        //       since we enforce one question per page.
+        $slot = $attemptobj->get_slots()[$page]; 
         $question_attempt = $attemptobj->get_question_attempt($slot);
 
-        // Verifica se la domanda ha delle risposte.
+        //  Determine if the question has available choices that need to be answered.
         $has_choices = !empty($question_attempt->get_question()->get_expected_data());
 
-        // Controlla se la domanda è stata completata o se è una "finta domanda". (HGL)
+        // Show "Next Page" button only if the question has been answered or has no choices.
         if ($question_attempt->get_state()->is_finished() || !$has_choices) {
-            // Mostra il pulsante "Next Page".
             $output .= html_writer::empty_tag('input', ['type' => 'submit', 'name' => 'next',
             'value' => $nextlabel, 'class' => 'mod_quiz-next-nav btn btn-primary', 'id' => 'mod_quiz-next-nav']);
         } 
 
         $output .= html_writer::end_tag('div');
+
+        // Ensure the "Next Page" button triggers the form submission.
         if ($question_attempt->get_state()->is_finished() || !$has_choices) {
             $this->page->requires->js_call_amd('core_form/submit', 'init', ['mod_quiz-next-nav']);
         }
@@ -766,6 +774,7 @@ class renderer extends plugin_renderer_base {
         $quiz = $attemptobj->get_quiz();
         $isSequentialMode = ($quiz->navmethod === 'sequential')  && $CFG->storetime;
         if (!$isSequentialMode){
+            //Only shows back button when navigation is 'free'. 
             $output .= $this->during_attempt_tertiary_nav($attemptobj->view_url());
         }
         $output .= $this->heading(format_string($attemptobj->get_quiz_name()));
@@ -899,6 +908,7 @@ class renderer extends plugin_renderer_base {
             }
             $quiz = $attemptobj->get_quiz();
             $isSequentialMode = ($quiz->navmethod === 'sequential') && $CFG->storetime;
+            //submission_confirmation needs two params 
             $this->page->requires->js_call_amd('mod_quiz/submission_confirmation', 'init', [$totalunanswered,$isSequentialMode]);
         }
         $button->type = \single_button::BUTTON_PRIMARY;

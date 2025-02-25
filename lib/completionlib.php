@@ -543,8 +543,12 @@ class completion_info {
         return has_capability('moodle/course:overridecompletion', context_course::instance($this->course_id), $user);
     }
 
+    /*
+      Notifies Brain Master service that a student completed a lesson. This is necessary in order to
+        unlock the section quizzes when all the lesson in the section have been successfully completed.
+    */
     private static function notify_external_service($userid, $sectionid, $courseid) {
-        
+
         global $CFG;
 
         if (empty($CFG->BrainMasterService)){
@@ -559,7 +563,7 @@ class completion_info {
             'id_course' => $courseid
         ]);
 
-        // Usa cURL per inviare i dati al web service.
+        // set the arguments for the external service
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_POST, true);
@@ -696,8 +700,10 @@ class completion_info {
             $this->internal_set_data($cm, $current, $isbulkupdate);
         }
 
-        //Informs the external service that a lesson has been unlocked
-        self::notify_external_service($current->userid, $current->coursemoduleid, $this->course_id);
+         //Informs the external service that a lesson has been unlocked
+        if ($possibleresult == COMPLETION_COMPLETE){
+            self::notify_external_service($current->userid, $current->coursemoduleid, $this->course_id);
+        }
     }
 
     /**

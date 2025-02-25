@@ -33,7 +33,7 @@ $cmid = optional_param('cmid', null, PARAM_INT);
 
 
 /**
- * Sends result to the external service
+ * Sends result to the external service, in order to train the reinforcement learning neural network
  */
 function send_answers($attempt_id) {
     global $CFG;
@@ -46,11 +46,10 @@ function send_answers($attempt_id) {
         'id_attempt' => $attempt_id
     ]);
 
-    // Usa cURL per inviare i dati al web service.
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, $url);
     curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, $data);  // http_build_query($data)
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $data);  
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_HTTPHEADER, [
         'Content-Type: application/json',
@@ -61,10 +60,8 @@ function send_answers($attempt_id) {
     curl_close($ch);
 
     if ($httpcode === 200) {
-        // Decodifica la risposta JSON
-        $decodedResponse = json_decode($response, true); // Usa true per un array associativo
-        # file_put_contents('C:\wamp64\www\moodle\allactivities_log.txt', "got response {$response}". PHP_EOL, FILE_APPEND);  
-      
+        $decodedResponse = json_decode($response, true); 
+
     } else {
         debugging("Brainmaster: Failed to notify web service. Response: $response", DEBUG_DEVELOPER);
         return  null;
@@ -77,9 +74,12 @@ $PAGE->set_cacheable(false);
 $PAGE->set_secondary_active_tab("modulepage");
 
 $attemptobj = quiz_create_attempt_handling_errors($attemptid, $cmid);
+
 if ($attemptobj->get_attempt()->action !== null){
+    // If the quiz is associated with Brain Master, send the result to the Brain Master Service
     send_answers($attemptid);
 }
+
 
 // Check login.
 require_login($attemptobj->get_course(), false, $attemptobj->get_cm());

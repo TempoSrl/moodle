@@ -81,22 +81,23 @@ define('QUIZ_SHOWIMAGE_LARGE', 2);
 
 
 
-function get_action($userid, $courseid) {
+/*
+   The Brain Master suggests the appropriate action to take. Based on this action, a different type of quiz
+    will be dynamically generated. The action taken will be stored in the table quiz_attempt. 
+*/
+function get_action($userid, $courseid) {    
     global $CFG;
 
     if (empty($CFG->BrainMasterService)){
         return null;
     }            
-    $url = $CFG->BrainMasterService."moodle_suggest_action"; // URL del web service.
-
-
+    $url = $CFG->BrainMasterService."moodle_suggest_action"; // web service URL
 
     $data = json_encode([
         'id_student' => $userid,
         'id_course' => $courseid
     ]);
 
-    // Usa cURL per inviare i dati al web service.
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, $url);
     curl_setopt($ch, CURLOPT_POST, true);
@@ -111,29 +112,23 @@ function get_action($userid, $courseid) {
     curl_close($ch);
 
     if ($httpcode === 200) {
-        // Decodifica la risposta JSON
-        $decodedResponse = json_decode($response, true); // Usa true per un array associativo
-        # file_put_contents('C:\wamp64\www\moodle\allactivities_log.txt', "got response {$response}". PHP_EOL, FILE_APPEND);  
+        $decodedResponse = json_decode($response, true); // True for a  dictionary
         if (isset($decodedResponse['error'])) {
             echo "Errore: " . $decodedResponse['error'];
             return null;
         } elseif (isset($decodedResponse['action'])) {
-            echo "Azione suggerita: " . $decodedResponse['action'];
             $action =  $decodedResponse['action'];
-            # file_put_contents('C:\wamp64\www\moodle\allactivities_log.txt', "got action {$action}". PHP_EOL, FILE_APPEND);  
             if ($action == "None"){
                 return  null;
             }
             return $action;            
-        } else {
-            echo "Risposta non prevista: " . $response;
+        } else {            
             return null;
         }
     } else {
         debugging("Brainmaster: Failed to notify web service. Response: $response", DEBUG_DEVELOPER);
         return  null;
     }
-
 
 }	
 
@@ -181,7 +176,7 @@ function quiz_create_attempt(quiz_settings $quizobj, $attemptnumber, $lastattemp
         $attempt->layout = '';
         $attempt->action = null;
         if ($quizobj->get_quiz_name()=="BrainMaster"){
-            //set the action by the external service
+            //obtain the action from the external service
             $attempt->action = get_action($userid, $quizobj->get_course()->id);
         }  
     } else {
@@ -241,7 +236,7 @@ function quiz_start_new_attempt($quizobj, $quba, $attempt, $attemptnumber, $time
             $quizobj->get_quizid(), $attempt->userid);
 
     // Partially load all the questions in this quiz.
-    $quizobj->preload_questions($attempt->userid, $attempt->action); //carica le domande in $quizobj->questions
+    $quizobj->preload_questions($attempt->userid, $attempt->action); //load questions in $quizobj->questions
 
     // First load all the non-random questions.
     $randomfound = false;
