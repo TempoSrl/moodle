@@ -59,6 +59,8 @@ class qbank_helper {
 
       /**
      * Complete the given slot with some data (questionid=s{slot.id}, filtercondition, category ,qtype, length )
+     * This is only a copy paste from what was previously inline in get_question_structure, in order to use it
+     *  also in get_brainmaster_structure
      */
     public static function prepare_slot(stdClass  $slot){
         // Ensure the right id is the id.
@@ -129,18 +131,15 @@ class qbank_helper {
 
         $ids = [];
         if ($httpcode === 200) {
-            // Decodifica la risposta JSON
-            $decodedResponse = json_decode($response, true); // Usa true per un array associativo
+            // Decodes json response
+            $decodedResponse = json_decode($response, true); // true asks for a dictionary
             
             if (isset($decodedResponse['error'])) {
-                echo "Errore: " . $decodedResponse['error'];
                 return null;
             } elseif (isset($decodedResponse['questions_id'])) {
-                echo "Test suggerito: " . var_export($decodedResponse['questions_id'],true);
                 $ids =  $decodedResponse['questions_id'];               
 
             } else {
-                echo "Risposta non prevista: " . $response;
                 return null;
             }
         } else {
@@ -149,9 +148,8 @@ class qbank_helper {
         }
 
         if (empty($ids)) {
-            $slotdata = []; // Nessun ID, quindi nessun risultato
-        } else {
-            // Creiamo i placeholder dinamici
+            $slotdata = []; // No ID so no output questions
+        } else {            
             $placeholders = [];
             $values = [];
         
@@ -189,8 +187,11 @@ class qbank_helper {
                 JOIN {context} c ON c.instanceid = quiz.id AND c.contextlevel=80
                 WHERE q.id $sql_in;
             ";
-            
-            // Run the query
+            // Execute the query to retrieve the questions from the database. 
+            // The question IDs are provided by the Brain Master service.
+            // Each question is placed in a separate slot and page to accurately measure:
+            //  - The response time.
+            //  - The time the student spends reviewing the annotation.
             $slotdata = $DB->get_records_sql($sql, $values);
 
             // Sort like $ids
@@ -201,6 +202,7 @@ class qbank_helper {
             });
 
             $counter = 1;
+            //recalculate slots and pages in order to keep the question order given by Brain Master
             foreach ($slotdata as $slot) {
                 $slot->slot = $counter;
                 $slot->slotid = $counter; // slotid = slot
