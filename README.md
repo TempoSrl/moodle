@@ -412,11 +412,16 @@ The only modification here was adding the parameters to invoke preload_questions
 ## File mod/quiz/db/install.xml
 
 Alla tabella 
+
+> ``` 
 > <TABLE NAME="quiz_attempts" COMMENT="Stores users attempts at quizzes.">
+>
 
 è stato aggiunto il campo 
 
+> ``` 
 > <FIELD NAME="action" TYPE="int" LENGTH="3" NOTNULL="false" DEFAULT="0" SEQUENCE="false" COMMENT="Action taken by the BrainMaster"/> 
+>
 
 
 ## License
