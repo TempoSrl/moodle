@@ -355,9 +355,9 @@ In this function, the notify_external_service function is called.
 
 ### send_answers($attempt_id)
 
-E' stata aggiunta questa funzione, che ha lo scopo di inviare a BrainMaster l'id del quiz_attempt che lo studente ha appena sostenuto. BrainMaster provvederà a prelevare i dati in autonomia.
+This function has been added to send the quiz_attempt ID of the quiz the student has just taken to BrainMaster. BrainMaster will then retrieve the data autonomously.
 
-Questa funzione è invocata qualora sia valorizzato il campo action di quiz_attempt
+This function is invoked when the action field of quiz_attempt is set.
 
 > ```php
 >    if ($attemptobj->get_attempt()->action !== null){
