@@ -673,7 +673,7 @@ class renderer extends plugin_renderer_base {
         } 
 
         $output .= html_writer::end_tag('div');
-
+        
         // Ensure the "Next Page" button triggers the form submission.
         if ($question_attempt->get_state()->is_finished() || !$has_choices) {
             $this->page->requires->js_call_amd('core_form/submit', 'init', ['mod_quiz-next-nav']);

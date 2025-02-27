@@ -80,7 +80,6 @@ define('QUIZ_SHOWIMAGE_LARGE', 2);
 
 
 
-
 /*
    The Brain Master suggests the appropriate action to take. Based on this action, a different type of quiz
     will be dynamically generated. The action taken will be stored in the table quiz_attempt. 
@@ -91,7 +90,7 @@ function get_action($userid, $courseid) {
     if (empty($CFG->BrainMasterService)){
         return null;
     }            
-    $url = $CFG->BrainMasterService."moodle_suggest_action"; // web service URL
+    $url = $CFG->BrainMasterService."moodle_suggest_action"; // URL del web service.
 
     $data = json_encode([
         'id_student' => $userid,
@@ -129,6 +128,7 @@ function get_action($userid, $courseid) {
         debugging("Brainmaster: Failed to notify web service. Response: $response", DEBUG_DEVELOPER);
         return  null;
     }
+
 
 }	
 

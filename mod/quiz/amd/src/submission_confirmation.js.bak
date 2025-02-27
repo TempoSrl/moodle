@@ -75,7 +75,7 @@ const registerEventListeners = (unAnsweredQuestions, isSequentialMode) => {
 /**
  * Initialises.
  * @param {int} unAnsweredQuestions Total number of unanswered questions
- * @param {boolean} isSequentialMode Sequential mode. If true, no confirmation is asked.
+ * @param {boolean} isSequentialMode - Sequential mode. If true, no confirmation is asked.
  */
 export const init = (unAnsweredQuestions,isSequentialMode ) => {
     Prefetch.prefetchStrings('core', ['submit']);

@@ -80,7 +80,6 @@ if ($attemptobj->get_attempt()->action !== null){
     send_answers($attemptid);
 }
 
-
 // Check login.
 require_login($attemptobj->get_course(), false, $attemptobj->get_cm());
 

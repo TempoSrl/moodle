@@ -162,7 +162,6 @@ class quiz_settings {
             $slots = qbank_helper::get_question_structure($this->quiz->id, $this->context);
         }
 
-
         $this->questions = [];
         foreach ($slots as $slot) {
             // Previously, $this->questions was a dictionary. Now it's a list to allow repetitions

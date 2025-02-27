@@ -222,7 +222,7 @@ class qbank_helper {
         foreach ($slotdata as $slot) {
             self::prepare_slot($slot);            
         }
-        
+        $to_shift = array_key_first($slotdata);
         return $slotdata;
     }
 
