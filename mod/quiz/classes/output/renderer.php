@@ -873,7 +873,7 @@ class renderer extends plugin_renderer_base {
         $output = '';
         global $CFG;
 
-        // Return to place button.
+        // Return to place button. This is hidden when we are measuring detailed response time
         if (!$CFG->storetime){
             if ($attemptobj->get_state() == quiz_attempt::IN_PROGRESS) {
                 $button = new single_button(

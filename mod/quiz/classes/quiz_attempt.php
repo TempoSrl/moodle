@@ -2206,8 +2206,7 @@ class quiz_attempt {
             throw new moodle_exception('errorprocessingresponses', 'question',
                     $this->attempt_url(null, $thispage), $e->getMessage(), $debuginfo);
         }
-       
-        
+
         // Send the user to the review page.
         $transaction->allow_commit();
 
