@@ -494,7 +494,7 @@ class renderer extends plugin_renderer_base {
         global $CFG;
         $output = '';
         $output .= $this->header();
-        $isSequentialMode = ($quizobj->get_quiz()->navmethod === 'sequential')  && $CFG->storetime;;
+        $isSequentialMode = ($quizobj->get_quiz()->navmethod === 'sequential')  && $CFG->storetime;
         if (!$isSequentialMode){
             //Don't show back button if mode is sequential
             $output .= $this->during_attempt_tertiary_nav($quizobj->view_url());

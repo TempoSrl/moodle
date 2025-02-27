@@ -200,7 +200,8 @@ class qbank_helper {
                 $pos_b = array_search($b->id, $ids);
                 return $pos_a - $pos_b;
             });
-
+            $slotdata = array_combine(range(1, count($slotdata)), array_values($slotdata));
+            
             $counter = 1;
             //recalculate slots and pages in order to keep the question order given by Brain Master
             foreach ($slotdata as $slot) {

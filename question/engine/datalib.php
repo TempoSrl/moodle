@@ -141,7 +141,7 @@ class question_engine_data_mapper {
         $stepdata = array();
 
         foreach ($qa->get_step_iterator() as $seq => $step) {
-            $stepdata[] = $this->insert_question_attempt_step($step, $record->id, $seq, $context);
+            $stepdata[] = $this->insert_question_attempt_step($step, $record->id, $seq, $context,true);
         }
 
         return $this->combine_step_data($stepdata);
@@ -208,30 +208,28 @@ class question_engine_data_mapper {
             $data->value = $value;
             $rows[] = $data;        
     
-            if ($CFG->storetime){
+            if ($CFG->storetime && ($name == '-submit') && $insert){
                 // Stores additional data in the log, in order to measure the elapsed time
-                //  for each response, and also the time spento on viewing the feedback
-                if ($insert){
-                    //this is necessary because we don't want this value to be replaced in successive
-                    //  updates
-                    $data = new stdClass();
-                    $data->attemptstepid = $stepid;
-                    $data->name =  $name . "_stamp";
-                    $data->value = time();
-                    $rows[] = $data;
-                }
-
-                if (isset($_SESSION['last_nextpage_timestamp'])) {
-                    $next_page_data = new stdClass();
-                    $next_page_data->attemptstepid = $stepid;
-                    $next_page_data->name = "next_page_timestamp";
-                    $next_page_data->value = $_SESSION['last_nextpage_timestamp'];
-                    $rows[] = $next_page_data;
-                    unset($_SESSION['last_nextpage_timestamp']);
-                }                
-            }
-    
+                //  for each response, and also the time spento on viewing the feedback                
+                //this is necessary because we don't want this value to be replaced in successive
+                //  updates
+                $data = new stdClass();
+                $data->attemptstepid = $stepid;
+                $data->name =  $name . "_stamp";
+                $data->value = time();
+                $rows[] = $data;                
+            }    
         }
+
+        if (isset($_SESSION['last_nextpage_timestamp'])) {
+            $next_page_data = new stdClass();
+            $next_page_data->attemptstepid = $stepid;
+            $next_page_data->name = "next_page_timestamp";
+            $next_page_data->value = $_SESSION['last_nextpage_timestamp'];
+            $rows[] = $next_page_data;
+            unset($_SESSION['last_nextpage_timestamp']);
+        }    
+
         return $rows;
     }
 
@@ -1644,30 +1642,11 @@ class question_engine_unit_of_work implements question_usage_observer {
         // We assume $this->attemptsmodified is a sorted list of objects each with their timemodified field        
         $isValidOrder = true; // is true if the list is sorted
 
-        if ($CFG->storetime){
-            // checks there are at least two elements in the list
-            if (count($this->attemptsmodified) > 1) {
-                for ($i = 0; $i < count($this->attemptsmodified) - 1; $i++) {
-                    if (isset($this->attemptsmodified[$i]) && isset($this->attemptsmodified[$i + 1])) {
-                        // compare timemodified of the current element with the next element's
-                        if ($this->attemptsmodified[$i]->timemodified > $this->attemptsmodified[$i + 1]->timemodified) {
-                            $isValidOrder = false;
-                            file_put_contents( 'C:\wamp64\www\allactivities_log.txt', 'elements out of order found '. PHP_EOL, FILE_APPEND);
-                            break; // elements are not sorted -> exit without updating
-                        }
-                    }
-                }
-            } else {
-                $isValidOrder = true; // Se l'array contiene 0 o 1 elemento, l'ordine è valido per default
-            }
+        // don't update if the updates are out of order
+        foreach ($this->attemptsmodified as $qa) {
+            $dm->update_question_attempt($qa);
         }
-        
-        if ($isValidOrder) {
-            // don't update if the updates are out of order
-            foreach ($this->attemptsmodified as $qa) {
-                $dm->update_question_attempt($qa);
-            }
-        }   
+           
 
         foreach ($this->attemptsadded as $qa) {
             $stepdata[] = $dm->insert_question_attempt(
