@@ -2170,6 +2170,7 @@ class quiz_attempt {
                 $params = array('uniqueid' => $uniqueid, 'consecutive'=>$CFG->repeat_errors);
                 $DB->execute("CALL process_question(:uniqueid, :consecutive)", $params);    
             }
+            
             $transaction->allow_commit();
 
             return $becomingoverdue ? self::OVERDUE : self::IN_PROGRESS;

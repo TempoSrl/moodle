@@ -700,7 +700,7 @@ class completion_info {
             $this->internal_set_data($cm, $current, $isbulkupdate);
         }
 
-         //Informs the external service that a lesson has been unlocked
+        //Informs the external service that a lesson has been unlocked
         if ($possibleresult == COMPLETION_COMPLETE){
             self::notify_external_service($current->userid, $current->coursemoduleid, $this->course_id);
         }

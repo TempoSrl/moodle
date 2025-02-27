@@ -165,7 +165,6 @@ class quiz_settings {
 
         $this->questions = [];
         foreach ($slots as $slot) {
-            $this->questions[$slot->questionid] = $slot;
             // Previously, $this->questions was a dictionary. Now it's a list to allow repetitions
             // of the same question in the quiz.
              $this->questions[] = $slot; 

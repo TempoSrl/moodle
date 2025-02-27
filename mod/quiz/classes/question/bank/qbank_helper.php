@@ -199,6 +199,7 @@ class qbank_helper {
                 JOIN {context} c ON c.instanceid = quiz.id AND c.contextlevel=80
                 WHERE q.id $sql_in;
             ";
+        
             // Execute the query to retrieve the questions from the database. 
             // The question IDs are provided by the Brain Master service.
             // Each question is placed in a separate slot and page to accurately measure:
@@ -212,6 +213,7 @@ class qbank_helper {
                 $pos_b = array_search($b->id, $ids);
                 return $pos_a - $pos_b;
             });
+            $slotdata = array_combine(range(1, count($slotdata)), array_values($slotdata));
 
             $counter = 1;
             //recalculate slots and pages in order to keep the question order given by Brain Master
@@ -224,7 +226,6 @@ class qbank_helper {
                 $counter++;
             }
 
-
         }
 
         $uri = $_SERVER["REQUEST_URI"];
@@ -233,7 +234,7 @@ class qbank_helper {
         foreach ($slotdata as $slot) {
             self::prepare_slot($slot);            
         }
-        $to_shift = array_key_first($slotdata);
+        
         return $slotdata;
     }
 
