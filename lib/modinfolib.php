@@ -1565,6 +1565,7 @@ class cm_info implements IteratorAggregate {
      *
      * @return ArrayIterator
      */
+    #[\ReturnTypeWillChange]
     public function getIterator() {
         // Make sure dynamic properties are retrieved prior to view properties.
         $this->obtain_dynamic_data();
@@ -3203,6 +3204,7 @@ class section_info implements IteratorAggregate {
      *
      * @return ArrayIterator
      */
+    #[\ReturnTypeWillChange]
     public function getIterator() {
         $ret = array();
         foreach (get_object_vars($this) as $key => $value) {

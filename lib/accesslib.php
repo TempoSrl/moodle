@@ -5216,6 +5216,7 @@ abstract class context extends stdClass implements IteratorAggregate {
      * Now we can convert context object to array using convert_to_array(),
      * and feed it properly to json_encode().
      */
+    #[\ReturnTypeWillChange]
     public function getIterator() {
         $ret = array(
             'id'           => $this->id,
