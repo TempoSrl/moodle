@@ -1639,9 +1639,6 @@ class question_engine_unit_of_work implements question_usage_observer {
                     $step, $questionattemptid, $seq, $this->quba->get_owning_context());
         }
 
-        // We assume $this->attemptsmodified is a sorted list of objects each with their timemodified field        
-        $isValidOrder = true; // is true if the list is sorted
-
         // don't update if the updates are out of order
         foreach ($this->attemptsmodified as $qa) {
             $dm->update_question_attempt($qa);

@@ -221,7 +221,7 @@ class quiz_attempt {
                     $new = clone $first;
                     $last = end($this->slots);
                     $new->slot = $last->slot + 1;
-                    $new->displaynumber = $last->displaynumber + 1;
+                    $new->displaynumber = ($last->displaynumber !== null && $last->displaynumber !== '') ? $last->displaynumber + 1   : null;
                     $this->slots[] = $new;
                 }      
             }
