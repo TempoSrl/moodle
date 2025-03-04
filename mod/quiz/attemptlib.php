@@ -149,11 +149,23 @@ class quiz {
     /**
      * Load just basic information about all the questions in this quiz.
      */
-    public function preload_questions() {
-        $slots = qbank_helper::get_question_structure($this->quiz->id, $this->context);
+    public function preload_questions(string $userid=null, int $action=null) {
+        global $CFG;
+
+        if ($this->quiz->name === "BrainMaster" && (!empty($CFG->BrainMasterService)) &&  $action !== null){
+            // If the quiz name is "BrainMaster", the answers are dynamically retrieved from an external service,
+            // specifically the Brain Master neural network.
+            $slots = qbank_helper::get_brainmaster_structure($userid, $this->course->id, $action);
+        }
+        else {            
+            // For other quizzes, the standard question structure is used.
+            $slots = qbank_helper::get_question_structure($this->quiz->id, $this->context);
+        }
+
         $this->questions = [];
         foreach ($slots as $slot) {
-            $this->questions[$slot->questionid] = $slot;
+            // $this->questions[$slot->questionid] = $slot;
+            $this->questions[] = $slot; 
         }
     }
 
@@ -717,6 +729,27 @@ class quiz_attempt {
                 array('quizid' => $this->get_quizid()), 'slot', 'slot, id, requireprevious');
         $this->sections = array_values($DB->get_records('quiz_sections',
                 array('quizid' => $this->get_quizid()), 'firstslot'));
+
+        // This logic applies only to the Brain Master quiz.
+        if ($this->get_quiz_name()=="BrainMaster"){
+            // New slots are added dynamically when needed. 
+            // The Brain Master quiz initially contains only one question (informative),
+            // while the actual questions are injected at runtime by the Brain Master service.
+            // However, the quiz is associated with a single slot, which is insufficient.
+            //
+            // To accommodate the dynamically generated quiz structure, we simulate 
+            // the presence of additional slots and pages.                        
+            while (count($this->slots) < $this->quba->question_count()) {   
+                $first = reset($this->slots);
+                if ($first && is_object($first)) {
+                    $new = clone $first;
+                    $last = end($this->slots);
+                    $new->slot = $last->slot + 1;
+                    //$new->displaynumber = $last->displaynumber + 1;
+                    $this->slots[] = $new;
+                }      
+            }
+        }
 
         $this->link_sections_and_slots();
         $this->determine_layout();
@@ -2383,6 +2416,7 @@ class quiz_attempt {
      */
     public function process_attempt($timenow, $finishattempt, $timeup, $thispage) {
         global $DB;
+        global $CFG;
 
         $transaction = $DB->start_delegated_transaction();
 
@@ -2457,6 +2491,15 @@ class quiz_attempt {
             } else {
                 // The student is too late.
                 $this->process_going_overdue($timenow, true);
+            }
+
+            if ($CFG->repeat_errors>0){
+                // Append failed questions to the end of the current attempt if needed.
+                // If a student answers a question incorrectly, it will be re-asked at 
+                // the end of the quiz until they answer correctly a configured number of times.              
+                $uniqueid = $this->get_uniqueid();
+                $params = array('uniqueid' => $uniqueid, 'consecutive'=>$CFG->repeat_errors);
+                $DB->execute("CALL process_question(:uniqueid, :consecutive)", $params);    
             }
 
             $transaction->allow_commit();

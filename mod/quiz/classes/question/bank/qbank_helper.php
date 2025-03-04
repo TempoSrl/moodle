@@ -64,6 +64,147 @@ class qbank_helper {
               ", [$questionid, question_version_status::QUESTION_STATUS_DRAFT]);
     }
 
+    
+    
+    public static function get_brainmaster_structure(string $userid, int $idcourse, ?int $action ): array {
+        global $DB;
+        // file_put_contents( 'C:\wamp64\www\moodle\allactivities_log.txt', 'executing qbank_helper/get_brainmaster_structure'. PHP_EOL, FILE_APPEND);
+        // file_put_contents( 'C:\wamp64\www\moodle\allactivities_log.txt', 'quizcontext'. PHP_EOL, FILE_APPEND);
+        // file_put_contents('C:\wamp64\www\moodle\allactivities_log.txt', "id_student {$userid}". PHP_EOL,FILE_APPEND);
+        // file_put_contents('C:\wamp64\www\moodle\allactivities_log.txt', "idcourse {$idcourse}". PHP_EOL,FILE_APPEND);
+        // file_put_contents('C:\wamp64\www\moodle\allactivities_log.txt', "action {$action}". PHP_EOL,FILE_APPEND);
+        
+        $url = 'http://192.168.1.175:5000/api/moodle_get_test'; // URL del web service.
+
+        $data = json_encode([
+            'id_student' => $userid,
+            'id_course' => $idcourse,
+            'action' => $action
+        ]);
+
+        // Usa cURL per inviare i dati al web service.
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $data);  // http_build_query($data)
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Content-Type: application/json',
+            'Content-Length: ' . strlen($data)
+        ]);
+        $response = curl_exec($ch);
+        $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        file_put_contents('C:\wamp64\www\moodle\allactivities_log.txt', "moodle_get_test got response {$response}". PHP_EOL, FILE_APPEND);  
+        
+        if ($httpcode !== 200) {
+            debugging("Brainmaster: Failed to notify web service. Response: $response", DEBUG_DEVELOPER);
+        }
+
+        $ids = [];
+        if ($httpcode === 200) {
+            // Decodifica la risposta JSON
+            $decodedResponse = json_decode($response, true); // Usa true per un array associativo
+            // file_put_contents('C:\wamp64\www\moodle\allactivities_log.txt', "moodle_get_test got response {$decodedResponse}". PHP_EOL, FILE_APPEND);  
+            if (isset($decodedResponse['error'])) {
+                echo "Errore: " . $decodedResponse['error'];
+                return null;
+            } elseif (isset($decodedResponse['questions_id'])) {
+                echo "Test suggerito: " . var_export($decodedResponse['questions_id'],true);
+                $ids =  $decodedResponse['questions_id'];               
+
+            } else {
+                echo "Risposta non prevista: " . $response;
+                return null;
+            }
+        } else {
+            debugging("Brainmaster: Failed to notify web service. Response: $response", DEBUG_DEVELOPER);
+            return  null;
+        }
+
+        if (empty($ids)) {
+            $slotdata = []; // Nessun ID, quindi nessun risultato
+        } else {
+            // Creiamo i placeholder dinamici
+            $placeholders = [];
+            $values = [];
+        
+            foreach ($ids as $index => $id) {
+                $placeholder = ':id' . $index;
+                $placeholders[] = $placeholder;
+                $values[$placeholder] = $id;
+            }
+            $ids = array_map('intval', $ids);
+            list($sql_in, $values) = $DB->get_in_or_equal($ids, SQL_PARAMS_NAMED, 'id');
+
+            // Creiamo la stringa dei placeholder per l'IN (...)
+            //$placeholders_string = implode(',', $placeholders);
+        
+            // Query con placeholder dinamici
+            //ROW_NUMBER() OVER (ORDER BY slot.id) AS slot,
+            // ROW_NUMBER() OVER (ORDER BY slot.id) AS slotid,
+            $sql = "
+                SELECT 
+                    ROW_NUMBER() OVER (ORDER BY slot.id) AS slot,
+                    ROW_NUMBER() OVER (ORDER BY slot.id) AS slotid,
+                    ROW_NUMBER() OVER (ORDER BY slot.id) AS page,
+                    slot.maxmark,
+                    1 AS requireprevious,
+                    NULL AS filtercondition,
+                    qv.status, 
+                    qv.id AS versionid,
+                    qv.version,
+                    qr.version AS requestedversion,
+                    qv.questionbankentryid,
+                    q.id AS questionid,
+                    q.*,
+                    qc.id AS category,
+                    qc.contextid AS contextid
+                FROM {question} q
+                JOIN {question_versions} qv ON q.id = qv.questionid
+                JOIN {question_bank_entries} qbe ON qv.questionbankentryid = qbe.id
+                LEFT JOIN {question_categories} qc ON qc.id = qbe.questioncategoryid
+                LEFT JOIN {question_references} qr ON  
+                            qbe.id = qr.questionbankentryid 
+                            AND qr.component='mod_quiz' 
+                            AND qr.questionarea='slot'                                
+                JOIN {quiz_slots} slot ON slot.id = qr.itemid
+                JOIN {quiz} quiz ON slot.quizid = quiz.id
+                JOIN {context} c ON c.instanceid = quiz.id AND c.contextlevel=80
+                WHERE q.id $sql_in;
+            ";
+            file_put_contents('C:\wamp64\www\moodle\allactivities_log.txt', $sql . PHP_EOL, FILE_APPEND);
+
+            // DEBUG: stampiamo query e parametri
+            // echo "<pre>QUERY:\n" . $sql . "\n</pre>";
+            // echo "<pre>PARAMS:\n" . print_r($values, true) . "\n</pre>";
+
+
+            // Eseguiamo la query con i valori corretti
+            $slotdata = $DB->get_records_sql($sql, $values);
+        }
+        
+        // Salva la query SQL nel file.
+        
+
+        $uri = $_SERVER["REQUEST_URI"];
+        echo($uri);
+        
+
+        foreach ($slotdata as $slot) {            
+            self::prepare_slot($slot);            
+            $temp = 'slot=' . $slot->slot . '; slotid=' . $slot->slotid . '; page=' . $slot->page . '; displaynum=' . $slot->displaynumber;
+            # file_put_contents('C:\wamp64\www\moodle\allactivities_log.txt', $temp . PHP_EOL, FILE_APPEND);
+            //da qui escono 5 quiz
+        }
+        $to_shift = array_key_first($slotdata);
+        // self::shift_question($slotdata, $to_shift);
+        // file_put_contents(__DIR__ . '/qbank_helper_log.txt', 'shifted '.$to_shift. PHP_EOL, FILE_APPEND);
+        return $slotdata;
+    }
+
+
     /**
      * Get the information about which questions should be used to create a quiz attempt.
      *
@@ -164,40 +305,44 @@ class qbank_helper {
 
         // Unpack the random info from question_set_reference.
         foreach ($slotdata as $slot) {
-            // Ensure the right id is the id.
-            $slot->id = $slot->slotid;
-
-            if ($slot->filtercondition) {
-                // Unpack the information about a random question.
-                $filtercondition = json_decode($slot->filtercondition);
-                $slot->questionid = 's' . $slot->id; // Sometimes this is used as an array key, so needs to be unique.
-                $slot->category = $filtercondition->questioncategoryid;
-                $slot->randomrecurse = (bool) $filtercondition->includingsubcategories;
-                $slot->randomtags = isset($filtercondition->tags) ? (array) $filtercondition->tags : [];
-                $slot->qtype = 'random';
-                $slot->name = get_string('random', 'quiz');
-                $slot->length = 1;
-            } else if ($slot->qtype === null) {
-                // This question must have gone missing. Put in a placeholder.
-                $slot->questionid = 's' . $slot->id; // Sometimes this is used as an array key, so needs to be unique.
-                $slot->category = 0;
-                $slot->qtype = 'missingtype';
-                $slot->name = get_string('missingquestion', 'quiz');
-                $slot->maxmark = 0;
-                $slot->questiontext = ' ';
-                $slot->questiontextformat = FORMAT_HTML;
-                $slot->length = 1;
-            } else if (!\question_bank::qtype_exists($slot->qtype)) {
-                // Question of unknown type found in the database. Set to placeholder question types instead.
-                $slot->qtype = 'missingtype';
-            } else {
-                $slot->_partiallyloaded = 1;
-            }
+            prepare_slot($slot)
         }
 
         return $slotdata;
     }
 
+    public static function prepare_slot(stdClass  $slot){
+        // Ensure the right id is the id.
+        $slot->id = $slot->slotid;
+
+        if ($slot->filtercondition) {
+            // Unpack the information about a random question.
+            $filtercondition = json_decode($slot->filtercondition);
+            $slot->questionid = 's' . $slot->id; // Sometimes this is used as an array key, so needs to be unique.
+            $slot->category = $filtercondition->questioncategoryid;
+            $slot->randomrecurse = (bool) $filtercondition->includingsubcategories;
+            $slot->randomtags = isset($filtercondition->tags) ? (array) $filtercondition->tags : [];
+            $slot->qtype = 'random';
+            $slot->name = get_string('random', 'quiz');
+            $slot->length = 1;
+        } else if ($slot->qtype === null) {
+            // This question must have gone missing. Put in a placeholder.
+            $slot->questionid = 's' . $slot->id; // Sometimes this is used as an array key, so needs to be unique.
+            $slot->category = 0;
+            $slot->qtype = 'missingtype';
+            $slot->name = get_string('missingquestion', 'quiz');
+            $slot->maxmark = 0;
+            $slot->questiontext = ' ';
+            $slot->questiontextformat = FORMAT_HTML;
+            $slot->length = 1;
+        } else if (!\question_bank::qtype_exists($slot->qtype)) {
+            // Question of unknown type found in the database. Set to placeholder question types instead.
+            $slot->qtype = 'missingtype';
+        } else {
+            $slot->_partiallyloaded = 1;
+        }
+    }
+    
     /**
      * Get this list of random selection tag ids from one of the slots returned by get_question_structure.
      *

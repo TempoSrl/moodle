@@ -65,6 +65,14 @@ if ($page == -1) {
     }
 }
 
+// When the user clicks "Next Page", save the timestamp in a session variable.
+if ($CFG->storetime && $next && !$finishattempt && !$timeup && isset($attemptid)) {
+    // store session timestamp for "Next Page".
+    if (!isset($_SESSION['last_nextpage_timestamp'])){
+        $_SESSION['last_nextpage_timestamp']= time();
+    }   
+}
+
 // Check login.
 require_login($attemptobj->get_course(), false, $attemptobj->get_cm());
 require_sesskey();

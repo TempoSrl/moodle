@@ -556,6 +556,42 @@ class completion_info {
         return has_capability('moodle/course:overridecompletion', context_course::instance($this->course_id), $user);
     }
 
+    private static function notify_external_service($userid, $sectionid, $courseid) {
+        
+        global $CFG;
+
+        if (empty($CFG->BrainMasterService)){
+            return;
+        }            
+        $url = $CFG->BrainMasterService."moodle_unlock_lesson"; // URL del web service.
+
+
+        $data = json_encode([
+            'id_student' => $userid,
+            'id_lesson' => $sectionid,
+            'id_course' => $courseid
+        ]);
+
+        // set the arguments for the external service
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $data);  // http_build_query($data)
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Content-Type: application/json',
+            'Content-Length: ' . strlen($data)
+        ]);
+        $response = curl_exec($ch);
+        $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($httpcode !== 200) {
+            debugging("Brainmaster: Failed to notify web service. Response: $response", DEBUG_DEVELOPER);
+        }
+    }
+
+
     /**
      * Updates (if necessary) the completion state of activity $cm for the given
      * user.
@@ -672,6 +708,10 @@ class completion_info {
             $current->timemodified    = time();
             $current->overrideby      = $override ? $USER->id : null;
             $this->internal_set_data($cm, $current, $isbulkupdate);
+        }
+        
+        if ($possibleresult == COMPLETION_COMPLETE){
+            self::notify_external_service($current->userid, $current->coursemoduleid, $this->course_id);
         }
     }
 

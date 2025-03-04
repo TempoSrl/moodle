@@ -188,7 +188,9 @@ class question_engine_data_mapper {
      * @param context $context the context of the owning question_usage_by_activity.
      * @return array of question_attempt_step_data rows, that still need to be inserted.
      */
-    protected function prepare_step_data(question_attempt_step $step, $stepid, $context) {
+    protected function prepare_step_data(question_attempt_step $step, $stepid, $context, $insert=false) {
+        global $CFG;
+
         $rows = array();
         foreach ($step->get_all_data() as $name => $value) {
             if ($value instanceof question_file_saver) {
@@ -203,7 +205,29 @@ class question_engine_data_mapper {
             $data->name = $name;
             $data->value = $value;
             $rows[] = $data;
+
+            if ($CFG->storetime && ($name == '-submit') && $insert){
+                // Stores additional data in the log, in order to measure the elapsed time
+                //  for each response, and also the time spento on viewing the feedback                
+                //this is necessary because we don't want this value to be replaced in successive
+                //  updates
+                $data = new stdClass();
+                $data->attemptstepid = $stepid;
+                $data->name =  $name . "_stamp";
+                $data->value = time();
+                $rows[] = $data;                
+            }
         }
+
+        if ($CFG->storetime && isset($_SESSION['last_nextpage_timestamp'])) {
+            $next_page_data = new stdClass();
+            $next_page_data->attemptstepid = $stepid;
+            $next_page_data->name = "next_page_timestamp";
+            $next_page_data->value = $_SESSION['last_nextpage_timestamp'];
+            $rows[] = $next_page_data;
+            unset($_SESSION['last_nextpage_timestamp']);
+        } 
+
         return $rows;
     }
 
@@ -238,7 +262,7 @@ class question_engine_data_mapper {
         $record = $this->make_step_record($step, $questionattemptid, $seq);
         $record->id = $this->db->insert_record('question_attempt_steps', $record);
 
-        return $this->prepare_step_data($step, $record->id, $context);
+        return $this->prepare_step_data($step, $record->id, $context, true);
     }
 
     /**
@@ -260,8 +284,8 @@ class question_engine_data_mapper {
         $this->db->update_record('question_attempt_steps', $record);
 
         $this->db->delete_records('question_attempt_step_data',
-                array('attemptstepid' => $record->id));
-        return $this->prepare_step_data($step, $record->id, $context);
+                array('attemptstepid' => $record->id));        
+        return $this->prepare_step_data($step, $record->id, $context, false);
     }
 
     /**
@@ -274,6 +298,8 @@ class question_engine_data_mapper {
      * @return array of question_attempt_step_data rows, that still need to be inserted.
      */
     public function insert_question_attempt_metadata(question_attempt $qa, array $names) {
+        global $CFG;
+
         $firststep = $qa->get_step(0);
 
         $rows = array();
@@ -283,6 +309,17 @@ class question_engine_data_mapper {
             $data->name = ':_' . $name;
             $data->value = $firststep->get_metadata_var($name);
             $rows[] = $data;
+
+            if ($CFG->storetime && $name == "-submit"){
+                // store the stamp in order to measure the time spent on viewing the
+                //  feedback on the single response
+                $data = new stdClass();
+                $data->attemptstepid = $firststep->get_id();
+                $data->name = ':_' . $name . "_stamp";
+                $data->value = $firststep->get_metadata_var($name . "_stamp");
+                $rows[] = $data;
+            }
+		
         }
 
         return $rows;
