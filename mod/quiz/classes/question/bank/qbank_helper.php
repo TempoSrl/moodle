@@ -230,9 +230,6 @@ class qbank_helper {
 
         }
 
-        $uri = $_SERVER["REQUEST_URI"];
-        echo($uri);
-
         foreach ($slotdata as $slot) {
             self::prepare_slot($slot);            
         }
