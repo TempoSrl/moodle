@@ -99,7 +99,7 @@ A loop has been added to this method, which applies only to "BrainMaster" quizze
 >                    $new = clone $first;
 >                    $last = end($this->slots);
 >                    $new->slot = $last->slot + 1;
->                    $new->displaynumber = $last->displaynumber + 1;
+>                    $new->displaynumber = ($last->displaynumber !== null && $last->displaynumber !== '') ? $last->displaynumber + 1  : null;
 >                    $this->slots[] = $new;
 >                }      
 >            }
