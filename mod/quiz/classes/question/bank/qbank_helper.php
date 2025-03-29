@@ -162,11 +162,7 @@ class qbank_helper {
                 WHERE q.id $sql_in;
             ";
         
-            // Execute the query to retrieve the questions from the database. 
-            // The question IDs are provided by the Brain Master service.
-            // Each question is placed in a separate slot and page to accurately measure:
-            //  - The response time.
-            //  - The time the student spends reviewing the annotation.
+           
             $slotdata = $DB->get_records_sql($sql, $values);
 
 			$unique_slotdata = [];
@@ -185,12 +181,7 @@ class qbank_helper {
             });
             $slotdata = array_combine(range(1, count($slotdata)), array_values($slotdata));
 
-			if (!$slotdata) {
-				echo $DB->get_last_error(); // Controlla eventuali errori
-				var_dump($values);          // Controlla i valori passati
-				die();                      // Blocca l'esecuzione per debug
-			}
-
+			
             $counter = 1;
             //recalculate slots and pages in order to keep the question order given by Brain Master
             foreach ($slotdata as $slot) {
@@ -204,10 +195,6 @@ class qbank_helper {
 			
         }
         
-        // Salva la query SQL nel file.
-        
-
-
         foreach ($slotdata as $slot) {            
             self::prepare_slot($slot);            
         }
