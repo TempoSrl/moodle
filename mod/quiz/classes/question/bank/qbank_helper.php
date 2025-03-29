@@ -141,26 +141,15 @@ class qbank_helper {
             // Creiamo la stringa dei placeholder per l'IN (...)
             //$placeholders_string = implode(',', $placeholders);
         
-            // Query con placeholder dinamici
-            //ROW_NUMBER() OVER (ORDER BY slot.id) AS slot,
-            // ROW_NUMBER() OVER (ORDER BY slot.id) AS slotid,
             $sql = "
-                SELECT 
-                    ROW_NUMBER() OVER (ORDER BY slot.id) AS slot,
-                    ROW_NUMBER() OVER (ORDER BY slot.id) AS slotid,
-                    ROW_NUMBER() OVER (ORDER BY slot.id) AS page,
-                    slot.maxmark,
-                    1 AS requireprevious,
-                    NULL AS filtercondition,
-                    qv.status, 
-                    qv.id AS versionid,
-                    qv.version,
-                    qr.version AS requestedversion,
-                    qv.questionbankentryid,
-                    q.id AS questionid,
-                    q.*,
-                    qc.id AS category,
-                    qc.contextid AS contextid
+                SELECT ROW_NUMBER() OVER (ORDER BY slot.id) AS slot,
+					1 AS requireprevious,
+                    slot.maxmark, slot.quizgradeitemid,
+                    NULL AS filtercondition, NULL AS usingcontextid,
+                    qv.status, qv.id AS versionid, qv.version,
+                    qr.version AS requestedversion, qv.questionbankentryid,
+                    q.id AS questionid, q.*,
+                    qc.id AS category, qc.contextid AS contextid
                 FROM {question} q
                 JOIN {question_versions} qv ON q.id = qv.questionid
                 JOIN {question_bank_entries} qbe ON qv.questionbankentryid = qbe.id
@@ -170,37 +159,58 @@ class qbank_helper {
                             AND qr.component='mod_quiz' 
                             AND qr.questionarea='slot'                                
                 JOIN {quiz_slots} slot ON slot.id = qr.itemid
-                JOIN {quiz} quiz ON slot.quizid = quiz.id
-                JOIN {context} c ON c.instanceid = quiz.id AND c.contextlevel=80
                 WHERE q.id $sql_in;
             ";
-            file_put_contents('C:\wamp64\www\moodle\allactivities_log.txt', $sql . PHP_EOL, FILE_APPEND);
-
-            // DEBUG: stampiamo query e parametri
-            // echo "<pre>QUERY:\n" . $sql . "\n</pre>";
-            // echo "<pre>PARAMS:\n" . print_r($values, true) . "\n</pre>";
-
-
-            // Eseguiamo la query con i valori corretti
+        
+            // Execute the query to retrieve the questions from the database. 
+            // The question IDs are provided by the Brain Master service.
+            // Each question is placed in a separate slot and page to accurately measure:
+            //  - The response time.
+            //  - The time the student spends reviewing the annotation.
             $slotdata = $DB->get_records_sql($sql, $values);
+
+			$unique_slotdata = [];
+			foreach ($slotdata as $record) {
+				// Usa questionid come chiave per evitare duplicati.
+				$unique_slotdata[$record->questionid] = $record;
+			}
+			// Ricava un array numerico dei record unici
+			$slotdata = array_values($unique_slotdata);
+
+            // Sort like $ids
+            usort($slotdata, function($a, $b) use ($ids) {
+                $pos_a = array_search($a->id, $ids);
+                $pos_b = array_search($b->id, $ids);
+                return $pos_a - $pos_b;
+            });
+            $slotdata = array_combine(range(1, count($slotdata)), array_values($slotdata));
+
+			if (!$slotdata) {
+				echo $DB->get_last_error(); // Controlla eventuali errori
+				var_dump($values);          // Controlla i valori passati
+				die();                      // Blocca l'esecuzione per debug
+			}
+
+            $counter = 1;
+            //recalculate slots and pages in order to keep the question order given by Brain Master
+            foreach ($slotdata as $slot) {
+                $slot->slot = $counter;
+                $slot->slotid = $counter; // slotid = slot
+                $slot->page = $counter;   // one page per question
+                $slot->displaynumber = $counter; 
+                $slot->requireprevious = 1;
+                $counter++;
+            }
+			
         }
         
         // Salva la query SQL nel file.
         
 
-        $uri = $_SERVER["REQUEST_URI"];
-        echo($uri);
-        
 
         foreach ($slotdata as $slot) {            
             self::prepare_slot($slot);            
-            $temp = 'slot=' . $slot->slot . '; slotid=' . $slot->slotid . '; page=' . $slot->page . '; displaynum=' . $slot->displaynumber;
-            # file_put_contents('C:\wamp64\www\moodle\allactivities_log.txt', $temp . PHP_EOL, FILE_APPEND);
-            //da qui escono 5 quiz
         }
-        $to_shift = array_key_first($slotdata);
-        // self::shift_question($slotdata, $to_shift);
-        // file_put_contents(__DIR__ . '/qbank_helper_log.txt', 'shifted '.$to_shift. PHP_EOL, FILE_APPEND);
         return $slotdata;
     }
 
