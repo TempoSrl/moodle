@@ -565,7 +565,6 @@ class completion_info {
         }            
         $url = $CFG->BrainMasterService."moodle_unlock_lesson"; // URL del web service.
 
-
         $data = json_encode([
             'id_student' => $userid,
             'id_lesson' => $sectionid,

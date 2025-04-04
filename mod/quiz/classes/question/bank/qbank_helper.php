@@ -65,16 +65,55 @@ class qbank_helper {
     }
 
     
-    
+   /**
+     * Complete the given slot with some data (questionid=s{slot.id}, filtercondition, category ,qtype, length )
+     * This is only a copy paste from what was previously inline in get_question_structure, in order to use it
+     *  also in get_brainmaster_structure
+     */
+    public static function prepare_slot(stdClass  $slot){
+        // Ensure the right id is the id.
+        $slot->id = $slot->slotid;
+
+        if ($slot->filtercondition) {
+            //Unpack the information about a random question.
+            $slot->questionid = 's' . $slot->id; // Sometimes this is used as an array key, so needs to be unique.
+            $filter = json_decode($slot->filtercondition, true);
+            $slot->filtercondition = question_reference_manager::convert_legacy_set_reference_filter_condition($filter);
+
+            $slot->category = $slot->filtercondition['filter']['category']['values'][0] ?? 0;
+
+            $slot->qtype = 'random';
+            $slot->name = get_string('random', 'quiz');
+            $slot->length = 1;
+        } else if ($slot->qtype === null) {
+            // This question must have gone missing. Put in a placeholder.
+            $slot->questionid = 's' . $slot->id; // Sometimes this is used as an array key, so needs to be unique.
+            $slot->category = 0;
+            $slot->qtype = 'missingtype';
+            $slot->name = get_string('missingquestion', 'quiz');
+            $slot->questiontext = ' ';
+            $slot->questiontextformat = FORMAT_HTML;
+            $slot->length = 1;
+        } else if (!\question_bank::qtype_exists($slot->qtype)) {
+            // Question of unknown type found in the database. Set to placeholder question types instead.
+            $slot->qtype = 'missingtype';
+        } else {
+            $slot->_partiallyloaded = 1;
+        }
+    }
+
+
+   /**
+     * Same as get_question_structure, but obtains questions from an external service
+     */
     public static function get_brainmaster_structure(string $userid, int $idcourse, ?int $action ): array {
         global $DB;
-        // file_put_contents( 'C:\wamp64\www\moodle\allactivities_log.txt', 'executing qbank_helper/get_brainmaster_structure'. PHP_EOL, FILE_APPEND);
-        // file_put_contents( 'C:\wamp64\www\moodle\allactivities_log.txt', 'quizcontext'. PHP_EOL, FILE_APPEND);
-        // file_put_contents('C:\wamp64\www\moodle\allactivities_log.txt', "id_student {$userid}". PHP_EOL,FILE_APPEND);
-        // file_put_contents('C:\wamp64\www\moodle\allactivities_log.txt', "idcourse {$idcourse}". PHP_EOL,FILE_APPEND);
-        // file_put_contents('C:\wamp64\www\moodle\allactivities_log.txt', "action {$action}". PHP_EOL,FILE_APPEND);
-        
-        $url = 'http://192.168.1.175:5000/api/moodle_get_test'; // URL del web service.
+        global $CFG;
+
+        if (empty($CFG->BrainMasterService)){
+            return [];
+        }            
+        $url = $CFG->BrainMasterService."moodle_get_test"; // web service url
 
         $data = json_encode([
             'id_student' => $userid,
@@ -82,11 +121,10 @@ class qbank_helper {
             'action' => $action
         ]);
 
-        // Usa cURL per inviare i dati al web service.
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, $data);  // http_build_query($data)
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $data);  
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
             'Content-Type: application/json',
@@ -96,26 +134,21 @@ class qbank_helper {
         $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
 
-        file_put_contents('C:\wamp64\www\moodle\allactivities_log.txt', "moodle_get_test got response {$response}". PHP_EOL, FILE_APPEND);  
-        
         if ($httpcode !== 200) {
             debugging("Brainmaster: Failed to notify web service. Response: $response", DEBUG_DEVELOPER);
         }
 
         $ids = [];
         if ($httpcode === 200) {
-            // Decodifica la risposta JSON
-            $decodedResponse = json_decode($response, true); // Usa true per un array associativo
-            // file_put_contents('C:\wamp64\www\moodle\allactivities_log.txt', "moodle_get_test got response {$decodedResponse}". PHP_EOL, FILE_APPEND);  
+            // Decodes json response
+            $decodedResponse = json_decode($response, true); // true asks for a dictionary
+
             if (isset($decodedResponse['error'])) {
-                echo "Errore: " . $decodedResponse['error'];
                 return null;
             } elseif (isset($decodedResponse['questions_id'])) {
-                echo "Test suggerito: " . var_export($decodedResponse['questions_id'],true);
                 $ids =  $decodedResponse['questions_id'];               
 
             } else {
-                echo "Risposta non prevista: " . $response;
                 return null;
             }
         } else {
@@ -124,12 +157,11 @@ class qbank_helper {
         }
 
         if (empty($ids)) {
-            $slotdata = []; // Nessun ID, quindi nessun risultato
-        } else {
-            // Creiamo i placeholder dinamici
+            $slotdata = []; // No ID so no output questions
+        } else {            
             $placeholders = [];
             $values = [];
-        
+
             foreach ($ids as $index => $id) {
                 $placeholder = ':id' . $index;
                 $placeholders[] = $placeholder;
@@ -138,9 +170,6 @@ class qbank_helper {
             $ids = array_map('intval', $ids);
             list($sql_in, $values) = $DB->get_in_or_equal($ids, SQL_PARAMS_NAMED, 'id');
 
-            // Creiamo la stringa dei placeholder per l'IN (...)
-            //$placeholders_string = implode(',', $placeholders);
-        
             $sql = "
                 SELECT ROW_NUMBER() OVER (ORDER BY slot.id) AS slot,
 					1 AS requireprevious,
@@ -162,7 +191,11 @@ class qbank_helper {
                 WHERE q.id $sql_in;
             ";
         
-           
+            // Execute the query to retrieve the questions from the database. 
+            // The question IDs are provided by the Brain Master service.
+            // Each question is placed in a separate slot and page to accurately measure:
+            //  - The response time.
+            //  - The time the student spends reviewing the annotation.
             $slotdata = $DB->get_records_sql($sql, $values);
 
 			$unique_slotdata = [];
@@ -181,7 +214,6 @@ class qbank_helper {
             });
             $slotdata = array_combine(range(1, count($slotdata)), array_values($slotdata));
 
-			
             $counter = 1;
             //recalculate slots and pages in order to keep the question order given by Brain Master
             foreach ($slotdata as $slot) {
@@ -192,14 +224,17 @@ class qbank_helper {
                 $slot->requireprevious = 1;
                 $counter++;
             }
-			
+
         }
-        
-        foreach ($slotdata as $slot) {            
+
+        foreach ($slotdata as $slot) {
             self::prepare_slot($slot);            
         }
+        
         return $slotdata;
     }
+
+    
 
 
     /**
@@ -219,8 +254,7 @@ class qbank_helper {
      * @param int|null $slotid optional, if passed only load the data for this one slot (if it is in this quiz).
      * @return array indexed by slot, with information about the content of each slot.
      */
-    public static function get_question_structure(int $quizid, \context_module $quizcontext,
-            int $slotid = null): array {
+    public static function get_question_structure(int $quizid, \context_module $quizcontext,  int $slotid = null): array {
         global $DB;
 
         $params = [
@@ -302,43 +336,12 @@ class qbank_helper {
 
         // Unpack the random info from question_set_reference.
         foreach ($slotdata as $slot) {
-            prepare_slot($slot)
+            self::prepare_slot($slot);
         }
 
         return $slotdata;
     }
 
-    public static function prepare_slot(stdClass  $slot){
-        // Ensure the right id is the id.
-        $slot->id = $slot->slotid;
-
-        if ($slot->filtercondition) {
-            // Unpack the information about a random question.
-            $filtercondition = json_decode($slot->filtercondition);
-            $slot->questionid = 's' . $slot->id; // Sometimes this is used as an array key, so needs to be unique.
-            $slot->category = $filtercondition->questioncategoryid;
-            $slot->randomrecurse = (bool) $filtercondition->includingsubcategories;
-            $slot->randomtags = isset($filtercondition->tags) ? (array) $filtercondition->tags : [];
-            $slot->qtype = 'random';
-            $slot->name = get_string('random', 'quiz');
-            $slot->length = 1;
-        } else if ($slot->qtype === null) {
-            // This question must have gone missing. Put in a placeholder.
-            $slot->questionid = 's' . $slot->id; // Sometimes this is used as an array key, so needs to be unique.
-            $slot->category = 0;
-            $slot->qtype = 'missingtype';
-            $slot->name = get_string('missingquestion', 'quiz');
-            $slot->maxmark = 0;
-            $slot->questiontext = ' ';
-            $slot->questiontextformat = FORMAT_HTML;
-            $slot->length = 1;
-        } else if (!\question_bank::qtype_exists($slot->qtype)) {
-            // Question of unknown type found in the database. Set to placeholder question types instead.
-            $slot->qtype = 'missingtype';
-        } else {
-            $slot->_partiallyloaded = 1;
-        }
-    }
     
     /**
      * Get this list of random selection tag ids from one of the slots returned by get_question_structure.
