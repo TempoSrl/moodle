@@ -221,7 +221,7 @@ class question_engine_data_mapper {
             }    
         }
 
-        if (isset($_SESSION['last_nextpage_timestamp'])) {
+        if ($CFG->storetime && isset($_SESSION['last_nextpage_timestamp'])) {
             $next_page_data = new stdClass();
             $next_page_data->attemptstepid = $stepid;
             $next_page_data->name = "next_page_timestamp";
@@ -264,7 +264,7 @@ class question_engine_data_mapper {
         $record = $this->make_step_record($step, $questionattemptid, $seq);
         $record->id = $this->db->insert_record('question_attempt_steps', $record);
 
-        return $this->prepare_step_data($step, $record->id, $context);
+        return $this->prepare_step_data($step, $record->id, $context, true);
     }
 
     /**

@@ -163,10 +163,6 @@ class qbank_helper {
 
             $sql = "
                 SELECT 
-                    ROW_NUMBER() OVER (ORDER BY slot.id) AS slot,
-                    ROW_NUMBER() OVER (ORDER BY slot.id) AS slotid,
-                    ROW_NUMBER() OVER (ORDER BY slot.id) AS page,
-                    ROW_NUMBER() OVER (ORDER BY slot.id) AS displaynumber,
                     1 AS requireprevious,
                     slot.maxmark, slot.quizgradeitemid,
                     NULL AS filtercondition, NULL AS usingcontextid,
@@ -183,8 +179,6 @@ class qbank_helper {
                             AND qr.component='mod_quiz' 
                             AND qr.questionarea='slot'                                
                 JOIN {quiz_slots} slot ON slot.id = qr.itemid
-                JOIN {quiz} quiz ON slot.quizid = quiz.id
-                JOIN {context} c ON c.instanceid = quiz.id AND c.contextlevel=80
                 WHERE q.id $sql_in;
             ";
             // Execute the query to retrieve the questions from the database. 
@@ -194,6 +188,14 @@ class qbank_helper {
             //  - The time the student spends reviewing the annotation.
             $slotdata = $DB->get_records_sql($sql, $values);
 
+            $unique_slotdata = [];
+			foreach ($slotdata as $record) {
+				// Usa questionid come chiave per evitare duplicati.
+				$unique_slotdata[$record->questionid] = $record;
+			}
+			// Ricava un array numerico dei record unici
+			$slotdata = array_values($unique_slotdata);
+            
             // Sort like $ids
             usort($slotdata, function($a, $b) use ($ids) {
                 $pos_a = array_search($a->id, $ids);
